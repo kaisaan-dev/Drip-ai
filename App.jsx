@@ -10,7 +10,6 @@ export default function DripAI() {
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileRef = useRef();
-  const shareCardRef = useRef();
 
   const processFile = (file) => {
     if (!file || !file.type.startsWith("image/")) return;
@@ -33,47 +32,14 @@ export default function DripAI() {
     if (!imageBase64) return;
     setLoading(true);
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: "image/jpeg", data: imageBase64 }
-              },
-              {
-                type: "text",
-                text: `You are a sharp, honest, stylish fashion critic. Analyse this outfit photo and respond ONLY with valid JSON, no markdown, no extra text.
-
-Return exactly this structure:
-{
-  "overallScore": <number 1-10>,
-  "verdict": "<one punchy sentence verdict, max 12 words>",
-  "scores": {
-    "Cohesion": <1-10>,
-    "Fit": <1-10>,
-    "Colour": <1-10>,
-    "Creativity": <1-10>,
-    "Vibe": <1-10>
-  },
-  "whatWorks": "<2-3 sentences on what's working>",
-  "whatDoesnt": "<2-3 sentences on what's not working>",
-  "stylistTip": "<one specific, actionable tip to elevate the look>"
-}`
-              }
-            ]
-          }]
-        })
+        body: JSON.stringify({ imageBase64 })
       });
       const data = await response.json();
-      const text = data.content.map(i => i.text || "").join("");
-      const clean = text.replace(/```json|```/g, "").trim();
-      setResult(JSON.parse(clean));
+      if (data.error) throw new Error(data.error);
+      setResult(data);
     } catch (err) {
       console.error(err);
       setResult({ error: true });
@@ -91,7 +57,7 @@ Return exactly this structure:
   const shareToTwitter = () => {
     const score = result?.overallScore;
     const label = getScoreLabel(score);
-    const text = `My outfit just got rated ${score}/10 (${label}) by Drip AI 🔥\n\nCheck yours at drip.ai`;
+    const text = `My outfit just got rated ${score}/10 (${label}) by Drip AI 🔥\n\nCheck yours at drip-ai-omega.vercel.app`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank");
   };
 
@@ -99,7 +65,7 @@ Return exactly this structure:
     const score = result?.overallScore;
     const label = getScoreLabel(score);
     const cats = STYLE_CATEGORIES.map(c => `${c}: ${result.scores[c]}/10`).join(" · ");
-    const text = `drip.ai rated my fit ${score}/10 (${label})\n${cats}\n"${result.verdict}"\ncheck yours → drip.ai`;
+    const text = `drip.ai rated my fit ${score}/10 (${label})\n${cats}\n"${result.verdict}"\ncheck yours → drip-ai-omega.vercel.app`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -128,7 +94,6 @@ Return exactly this structure:
       color: "#F0EDE6",
       overflowX: "hidden"
     }}>
-      {/* Grain */}
       <div style={{
         position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none",
         backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E\")",
@@ -143,13 +108,11 @@ Return exactly this structure:
             <h1 style={{
               fontSize: "clamp(52px, 14vw, 88px)", fontWeight: "900", lineHeight: "0.9",
               margin: 0, letterSpacing: "-0.04em",
-              fontFamily: "'Georgia', serif",
-              color: "#F0EDE6"
+              fontFamily: "'Georgia', serif", color: "#F0EDE6"
             }}>drip</h1>
             <span style={{
               fontSize: "clamp(18px, 4vw, 24px)", fontWeight: "400",
-              color: "#C8F560", fontFamily: "'Courier New', monospace",
-              letterSpacing: "0.1em"
+              color: "#C8F560", fontFamily: "'Courier New', monospace", letterSpacing: "0.1em"
             }}>.ai</span>
           </div>
           <div style={{ fontSize: "12px", letterSpacing: "0.2em", color: "#444", marginTop: "8px" }}>
@@ -183,7 +146,7 @@ Return exactly this structure:
           </div>
         )}
 
-        {/* Preview + Analyse */}
+        {/* Preview */}
         {image && !result && (
           <div>
             <div style={{ position: "relative", borderRadius: "4px", overflow: "hidden", marginBottom: "16px" }}>
@@ -242,12 +205,10 @@ Return exactly this structure:
               }
             `}</style>
 
-            {/* SHAREABLE CARD */}
-            <div ref={shareCardRef} style={{
+            <div style={{
               background: "#111", border: "1px solid #1E1E1E",
               borderRadius: "8px", overflow: "hidden", marginBottom: "16px"
             }}>
-              {/* Card top - image + score overlay */}
               <div style={{ position: "relative" }}>
                 <img src={image} alt="outfit" style={{
                   width: "100%", display: "block",
@@ -257,7 +218,6 @@ Return exactly this structure:
                   position: "absolute", inset: 0,
                   background: "linear-gradient(to top, #111 0%, rgba(0,0,0,0.3) 50%, transparent 100%)"
                 }} />
-                {/* Score badge */}
                 <div style={{
                   position: "absolute", bottom: "20px", left: "20px", right: "20px",
                   display: "flex", alignItems: "flex-end", justifyContent: "space-between"
@@ -288,18 +248,14 @@ Return exactly this structure:
                 </div>
               </div>
 
-              {/* Card body */}
               <div style={{ padding: "20px" }}>
-                {/* Verdict */}
                 <div style={{
                   fontSize: "15px", fontStyle: "italic", color: "#AAA",
-                  fontFamily: "'Georgia', serif", marginBottom: "20px",
-                  lineHeight: "1.5"
+                  fontFamily: "'Georgia', serif", marginBottom: "20px", lineHeight: "1.5"
                 }}>
                   "{result.verdict}"
                 </div>
 
-                {/* Category bars */}
                 <div style={{ marginBottom: "20px" }}>
                   {STYLE_CATEGORIES.map(cat => (
                     <div key={cat} style={{ marginBottom: "10px" }}>
@@ -320,7 +276,6 @@ Return exactly this structure:
                   ))}
                 </div>
 
-                {/* Feedback */}
                 {[
                   { label: "WHAT'S WORKING", content: result.whatWorks, accent: "#C8F560" },
                   { label: "WHAT'S NOT", content: result.whatDoesnt, accent: "#F56060" },
@@ -342,7 +297,6 @@ Return exactly this structure:
               </div>
             </div>
 
-            {/* Share buttons */}
             <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
               <button onClick={copyShareText} style={{
                 flex: 1, padding: "14px",
