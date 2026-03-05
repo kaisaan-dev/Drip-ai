@@ -1,3 +1,11 @@
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -9,26 +17,27 @@ export default async function handler(req, res) {
   const { imageBase64 } = req.body;
   if (!imageBase64) return res.status(400).json({ error: 'No image provided' });
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 }
-          },
-          {
-            type: 'text',
-            text: `You are a sharp, honest, stylish fashion critic. Analyse this outfit photo and respond ONLY with valid JSON, no markdown, no extra text.
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 }
+            },
+            {
+              type: 'text',
+              text: `You are a sharp, honest, stylish fashion critic. Analyse this outfit photo and respond ONLY with valid JSON, no markdown, no extra text.
 
 Return exactly this structure:
 {
@@ -45,20 +54,24 @@ Return exactly this structure:
   "whatDoesnt": "<2-3 sentences on what's not working>",
   "stylistTip": "<one specific, actionable tip to elevate the look>"
 }`
-          }
-        ]
-      }]
-    })
-  });
+            }
+          ]
+        }]
+      })
+    });
 
-  const data = await response.json();
-  const text = data.content.map(i => i.text || '').join('');
-  const clean = text.replace(/```json|```/g, '').trim();
+    const data = await response.json();
 
-  try {
+    if (!data.content || !Array.isArray(data.content)) {
+      return res.status(500).json({ error: 'Invalid response from AI', details: data });
+    }
+
+    const text = data.content.map(i => i.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
     const result = JSON.parse(clean);
     res.status(200).json(result);
-  } catch {
-    res.status(500).json({ error: 'Failed to parse response' });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 }
