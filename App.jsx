@@ -9,6 +9,7 @@ export default function DripAI() {
   const [loading, setLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const fileRef = useRef();
 
   const processFile = (file) => {
@@ -18,6 +19,7 @@ export default function DripAI() {
       setImage(e.target.result);
       setImageBase64(e.target.result.split(",")[1]);
       setResult(null);
+      setErrorMsg("");
     };
     reader.readAsDataURL(file);
   };
@@ -31,17 +33,31 @@ export default function DripAI() {
   const analyzeOutfit = async () => {
     if (!imageBase64) return;
     setLoading(true);
+    setErrorMsg("");
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64 })
       });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
-      setResult(data);
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setErrorMsg("Raw response: " + text.slice(0, 200));
+        setResult({ error: true });
+        setLoading(false);
+        return;
+      }
+      if (data.error) {
+        setErrorMsg(data.error + (data.details ? " — " + JSON.stringify(data.details) : ""));
+        setResult({ error: true });
+      } else {
+        setResult(data);
+      }
     } catch (err) {
-      console.error(err);
+      setErrorMsg(err.message);
       setResult({ error: true });
     }
     setLoading(false);
@@ -52,6 +68,7 @@ export default function DripAI() {
     setImageBase64(null);
     setResult(null);
     setCopied(false);
+    setErrorMsg("");
   };
 
   const shareToTwitter = () => {
@@ -94,15 +111,8 @@ export default function DripAI() {
       color: "#F0EDE6",
       overflowX: "hidden"
     }}>
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none",
-        backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E\")",
-        opacity: 0.5
-      }} />
-
       <div style={{ position: "relative", zIndex: 1, maxWidth: "520px", margin: "0 auto", padding: "40px 20px 80px" }}>
 
-        {/* Header */}
         <div style={{ marginBottom: "48px" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
             <h1 style={{
@@ -115,13 +125,10 @@ export default function DripAI() {
               color: "#C8F560", fontFamily: "'Courier New', monospace", letterSpacing: "0.1em"
             }}>.ai</span>
           </div>
-          <div style={{ fontSize: "12px", letterSpacing: "0.2em", color: "#444", marginTop: "8px" }}>
-            RATE YOUR FIT WITH AI
-          </div>
+          <div style={{ fontSize: "12px", letterSpacing: "0.2em", color: "#444", marginTop: "8px" }}>RATE YOUR FIT WITH AI</div>
           <div style={{ width: "32px", height: "2px", background: "#C8F560", marginTop: "12px" }} />
         </div>
 
-        {/* Upload */}
         {!image && (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -132,31 +139,21 @@ export default function DripAI() {
               border: `2px dashed ${dragOver ? "#C8F560" : "#222"}`,
               borderRadius: "4px", padding: "64px 32px",
               textAlign: "center", cursor: "pointer",
-              transition: "all 0.2s",
               background: dragOver ? "rgba(200,245,96,0.03)" : "transparent",
             }}
           >
             <div style={{ fontSize: "52px", marginBottom: "20px" }}>👕</div>
-            <div style={{ fontSize: "13px", letterSpacing: "0.2em", textTransform: "uppercase", color: "#666" }}>
-              Drop your fit
-            </div>
+            <div style={{ fontSize: "13px", letterSpacing: "0.2em", textTransform: "uppercase", color: "#666" }}>Drop your fit</div>
             <div style={{ fontSize: "11px", color: "#333", marginTop: "8px" }}>tap to upload · any photo works</div>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
               onChange={(e) => processFile(e.target.files[0])} />
           </div>
         )}
 
-        {/* Preview */}
         {image && !result && (
           <div>
             <div style={{ position: "relative", borderRadius: "4px", overflow: "hidden", marginBottom: "16px" }}>
-              <img src={image} alt="outfit" style={{
-                width: "100%", display: "block", maxHeight: "500px", objectFit: "cover"
-              }} />
-              <div style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%)"
-              }} />
+              <img src={image} alt="outfit" style={{ width: "100%", display: "block", maxHeight: "500px", objectFit: "cover" }} />
             </div>
             <div style={{ display: "flex", gap: "12px" }}>
               <button onClick={analyzeOutfit} disabled={loading} style={{
@@ -166,21 +163,19 @@ export default function DripAI() {
                 border: "none", borderRadius: "4px",
                 fontSize: "13px", fontWeight: "700", letterSpacing: "0.25em",
                 textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer",
-                fontFamily: "'Courier New', monospace", transition: "all 0.15s"
+                fontFamily: "'Courier New', monospace"
               }}>
                 {loading ? "READING THE FIT..." : "RATE MY FIT →"}
               </button>
               <button onClick={reset} style={{
                 padding: "18px 20px", background: "transparent", color: "#444",
                 border: "1px solid #1A1A1A", borderRadius: "4px",
-                fontSize: "11px", cursor: "pointer",
-                fontFamily: "'Courier New', monospace", letterSpacing: "0.1em"
+                fontSize: "11px", cursor: "pointer", fontFamily: "'Courier New', monospace"
               }}>✕</button>
             </div>
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div style={{ textAlign: "center", padding: "40px 0" }}>
             <div style={{
@@ -188,115 +183,60 @@ export default function DripAI() {
               border: "2px solid #1A1A1A", borderTopColor: "#C8F560",
               borderRadius: "50%", animation: "spin 0.7s linear infinite"
             }} />
-            <div style={{ marginTop: "16px", fontSize: "11px", letterSpacing: "0.25em", color: "#444" }}>
-              ANALYSING YOUR DRIP...
-            </div>
+            <div style={{ marginTop: "16px", fontSize: "11px", letterSpacing: "0.25em", color: "#444" }}>ANALYSING YOUR DRIP...</div>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
 
-        {/* Results */}
         {result && !result.error && (
-          <div style={{ animation: "fadeUp 0.4s ease forwards" }}>
-            <style>{`
-              @keyframes fadeUp {
-                from { opacity: 0; transform: translateY(16px); }
-                to { opacity: 1; transform: translateY(0); }
-              }
-            `}</style>
-
-            <div style={{
-              background: "#111", border: "1px solid #1E1E1E",
-              borderRadius: "8px", overflow: "hidden", marginBottom: "16px"
-            }}>
+          <div>
+            <div style={{ background: "#111", border: "1px solid #1E1E1E", borderRadius: "8px", overflow: "hidden", marginBottom: "16px" }}>
               <div style={{ position: "relative" }}>
-                <img src={image} alt="outfit" style={{
-                  width: "100%", display: "block",
-                  maxHeight: "360px", objectFit: "cover", objectPosition: "top"
-                }} />
-                <div style={{
-                  position: "absolute", inset: 0,
-                  background: "linear-gradient(to top, #111 0%, rgba(0,0,0,0.3) 50%, transparent 100%)"
-                }} />
-                <div style={{
-                  position: "absolute", bottom: "20px", left: "20px", right: "20px",
-                  display: "flex", alignItems: "flex-end", justifyContent: "space-between"
-                }}>
+                <img src={image} alt="outfit" style={{ width: "100%", display: "block", maxHeight: "360px", objectFit: "cover", objectPosition: "top" }} />
+                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, #111 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }} />
+                <div style={{ position: "absolute", bottom: "20px", left: "20px", right: "20px", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{
-                      fontSize: "72px", fontWeight: "900", lineHeight: "1",
-                      fontFamily: "'Georgia', serif",
-                      color: getScoreColor(result.overallScore),
-                      textShadow: "0 2px 20px rgba(0,0,0,0.5)"
-                    }}>
-                      {result.overallScore}
-                      <span style={{ fontSize: "24px", color: "rgba(255,255,255,0.4)" }}>/10</span>
+                    <div style={{ fontSize: "72px", fontWeight: "900", lineHeight: "1", fontFamily: "'Georgia', serif", color: getScoreColor(result.overallScore) }}>
+                      {result.overallScore}<span style={{ fontSize: "24px", color: "rgba(255,255,255,0.4)" }}>/10</span>
                     </div>
-                    <div style={{
-                      fontSize: "12px", letterSpacing: "0.2em",
-                      color: getScoreColor(result.overallScore), marginTop: "4px"
-                    }}>
+                    <div style={{ fontSize: "12px", letterSpacing: "0.2em", color: getScoreColor(result.overallScore), marginTop: "4px" }}>
                       {getScoreLabel(result.overallScore)}
                     </div>
                   </div>
-                  <div style={{
-                    fontSize: "18px", fontWeight: "900", letterSpacing: "-0.02em",
-                    fontFamily: "'Georgia', serif", color: "rgba(255,255,255,0.6)"
-                  }}>
+                  <div style={{ fontSize: "18px", fontWeight: "900", fontFamily: "'Georgia', serif", color: "rgba(255,255,255,0.6)" }}>
                     drip<span style={{ color: "#C8F560" }}>.ai</span>
                   </div>
                 </div>
               </div>
-
               <div style={{ padding: "20px" }}>
-                <div style={{
-                  fontSize: "15px", fontStyle: "italic", color: "#AAA",
-                  fontFamily: "'Georgia', serif", marginBottom: "20px", lineHeight: "1.5"
-                }}>
+                <div style={{ fontSize: "15px", fontStyle: "italic", color: "#AAA", fontFamily: "'Georgia', serif", marginBottom: "20px", lineHeight: "1.5" }}>
                   "{result.verdict}"
                 </div>
-
                 <div style={{ marginBottom: "20px" }}>
                   {STYLE_CATEGORIES.map(cat => (
                     <div key={cat} style={{ marginBottom: "10px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                         <span style={{ fontSize: "10px", letterSpacing: "0.15em", color: "#555" }}>{cat.toUpperCase()}</span>
-                        <span style={{ fontSize: "10px", color: getScoreColor(result.scores[cat]) }}>
-                          {result.scores[cat]}/10
-                        </span>
+                        <span style={{ fontSize: "10px", color: getScoreColor(result.scores[cat]) }}>{result.scores[cat]}/10</span>
                       </div>
                       <div style={{ height: "2px", background: "#1A1A1A", borderRadius: "1px" }}>
-                        <div style={{
-                          height: "100%", borderRadius: "1px",
-                          width: `${result.scores[cat] * 10}%`,
-                          background: getScoreColor(result.scores[cat])
-                        }} />
+                        <div style={{ height: "100%", borderRadius: "1px", width: `${result.scores[cat] * 10}%`, background: getScoreColor(result.scores[cat]) }} />
                       </div>
                     </div>
                   ))}
                 </div>
-
                 {[
                   { label: "WHAT'S WORKING", content: result.whatWorks, accent: "#C8F560" },
                   { label: "WHAT'S NOT", content: result.whatDoesnt, accent: "#F56060" },
                   { label: "STYLIST TIP", content: result.stylistTip, accent: "#60C8F5" },
                 ].map(({ label, content, accent }) => (
-                  <div key={label} style={{
-                    marginBottom: "12px", padding: "14px 16px",
-                    background: "#0D0D0D", borderRadius: "4px",
-                    borderLeft: `2px solid ${accent}`
-                  }}>
-                    <div style={{ fontSize: "9px", letterSpacing: "0.3em", color: accent, marginBottom: "6px" }}>
-                      {label}
-                    </div>
-                    <div style={{ fontSize: "13px", lineHeight: "1.6", color: "#888" }}>
-                      {content}
-                    </div>
+                  <div key={label} style={{ marginBottom: "12px", padding: "14px 16px", background: "#0D0D0D", borderRadius: "4px", borderLeft: `2px solid ${accent}` }}>
+                    <div style={{ fontSize: "9px", letterSpacing: "0.3em", color: accent, marginBottom: "6px" }}>{label}</div>
+                    <div style={{ fontSize: "13px", lineHeight: "1.6", color: "#888" }}>{content}</div>
                   </div>
                 ))}
               </div>
             </div>
-
             <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
               <button onClick={copyShareText} style={{
                 flex: 1, padding: "14px",
@@ -304,55 +244,42 @@ export default function DripAI() {
                 color: copied ? "#C8F560" : "#0A0A0A",
                 border: copied ? "1px solid #C8F560" : "none",
                 borderRadius: "4px", fontSize: "12px", fontWeight: "700",
-                letterSpacing: "0.2em", cursor: "pointer",
-                fontFamily: "'Courier New', monospace", transition: "all 0.2s"
+                letterSpacing: "0.2em", cursor: "pointer", fontFamily: "'Courier New', monospace"
               }}>
                 {copied ? "COPIED ✓" : "COPY TO SHARE"}
               </button>
               <button onClick={shareToTwitter} style={{
-                flex: 1, padding: "14px",
-                background: "transparent", color: "#888",
+                flex: 1, padding: "14px", background: "transparent", color: "#888",
                 border: "1px solid #222", borderRadius: "4px",
                 fontSize: "12px", fontWeight: "700", letterSpacing: "0.2em",
                 cursor: "pointer", fontFamily: "'Courier New', monospace"
-              }}>
-                POST ON X →
-              </button>
+              }}>POST ON X →</button>
             </div>
-
             <button onClick={reset} style={{
-              width: "100%", padding: "14px",
-              background: "transparent", color: "#333",
-              border: "1px solid #111", borderRadius: "4px",
-              fontSize: "11px", cursor: "pointer",
-              fontFamily: "'Courier New', monospace",
-              letterSpacing: "0.2em", textTransform: "uppercase"
-            }}>
-              CHECK ANOTHER FIT
-            </button>
+              width: "100%", padding: "14px", background: "transparent", color: "#333",
+              border: "1px solid #111", borderRadius: "4px", fontSize: "11px", cursor: "pointer",
+              fontFamily: "'Courier New', monospace", letterSpacing: "0.2em", textTransform: "uppercase"
+            }}>CHECK ANOTHER FIT</button>
           </div>
         )}
 
         {result?.error && (
-          <div style={{ textAlign: "center", padding: "32px", color: "#F56060", fontSize: "13px" }}>
-            Something went wrong. Try again.
-            <br />
+          <div style={{ textAlign: "center", padding: "32px", color: "#F56060", fontSize: "12px" }}>
+            <div style={{ marginBottom: "12px", fontWeight: "700" }}>Something went wrong.</div>
+            {errorMsg && (
+              <div style={{ background: "#1A0A0A", border: "1px solid #3A0A0A", borderRadius: "4px", padding: "12px", fontSize: "10px", color: "#888", textAlign: "left", wordBreak: "break-all", marginBottom: "16px" }}>
+                {errorMsg}
+              </div>
+            )}
             <button onClick={reset} style={{
-              marginTop: "16px", padding: "12px 24px",
-              background: "transparent", color: "#555",
-              border: "1px solid #222", borderRadius: "4px",
-              cursor: "pointer", fontFamily: "'Courier New', monospace",
-              fontSize: "11px", letterSpacing: "0.15em"
+              padding: "12px 24px", background: "transparent", color: "#555",
+              border: "1px solid #222", borderRadius: "4px", cursor: "pointer",
+              fontFamily: "'Courier New', monospace", fontSize: "11px", letterSpacing: "0.15em"
             }}>RETRY</button>
           </div>
         )}
 
-        <div style={{
-          marginTop: "64px", paddingTop: "20px",
-          borderTop: "1px solid #111",
-          fontSize: "10px", letterSpacing: "0.2em", color: "#222",
-          textAlign: "center"
-        }}>
+        <div style={{ marginTop: "64px", paddingTop: "20px", borderTop: "1px solid #111", fontSize: "10px", letterSpacing: "0.2em", color: "#222", textAlign: "center" }}>
           DRIP.AI — AI FASHION CRITIC
         </div>
       </div>
